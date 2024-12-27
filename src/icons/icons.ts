@@ -1,6 +1,7 @@
 import {
 	AlertTriangle,
 	AlignLeft, 
+	ArrowUp,
 	ArrowUpRight,
 	Binary, 
 	Calendar, 
@@ -32,6 +33,7 @@ import { createIcons } from 'lucide';
 export const icons = {
 	AlertTriangle,
 	AlignLeft,
+	ArrowUp,
 	ArrowUpRight,
 	Binary,
 	Calendar,
