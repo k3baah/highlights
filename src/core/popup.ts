@@ -24,6 +24,7 @@ import { debounce } from '../utils/debounce';
 import { sanitizeFileName } from '../utils/string-utils';
 import { saveFile } from '../utils/file-utils';
 import { translatePage, getMessage, setupLanguageAndDirection } from '../utils/i18n';
+import { sendToLLM } from '../utils/interpreter';
 
 let loadedSettings: Settings;
 let currentTemplate: Template | null = null;
@@ -497,6 +498,29 @@ async function initializeUI() {
 		window.addEventListener('unload', () => {
 			browser.runtime.sendMessage({ action: "sidePanelClosed" });
 		});
+	}
+
+	// Initialize the chat interface
+	const chatSendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement;
+	const chatMessageInput = document.getElementById('chat-message-input') as HTMLTextAreaElement;
+	const chatMessagesContainer = document.getElementById('chat-messages') as HTMLDivElement;
+
+	// If elements exist, set up event listeners
+	if (chatSendBtn && chatMessageInput && chatMessagesContainer) {
+		chatSendBtn.addEventListener('click', () => {
+			handleSendChatMessage(chatMessageInput, chatMessagesContainer);
+		});
+
+		// Add enter key handling (optional)
+		chatMessageInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' && !e.shiftKey) {
+				e.preventDefault();
+				handleSendChatMessage(chatMessageInput, chatMessagesContainer);
+			}
+		});
+
+		// Load previous chat state
+		await loadChatState();
 	}
 }
 
@@ -1241,4 +1265,65 @@ async function loadChatState(): Promise<void> {
 		chatState.messages = data.messages;
 		updateChatUI();
 	}
+}
+
+async function handleSendChatMessage(
+	chatInput: HTMLTextAreaElement,
+	chatMessagesContainer: HTMLDivElement
+) {
+	const userMessage = chatInput.value.trim();
+	if (!userMessage) return;
+
+	// 1️⃣ Show user message in chat UI
+	chatState.messages.push({ role: 'user', content: userMessage, timestamp: Date.now() });
+	appendChatMessage('user', userMessage, chatMessagesContainer);
+	chatInput.value = '';
+
+	try {
+		// 2️⃣ Pass entire conversation (chatHistory) to existing LLM code
+		//    Example reusing "sendToLLM" from interpreter
+		const modelConfig = loadedSettings.models.find(
+			(m) => m.id === loadedSettings.interpreterModel
+		);
+		if (!modelConfig) {
+			throw new Error('No valid model configuration found for chat.');
+		}
+
+		// For demonstration, the entire chat is concatenated; refine as desired
+		const conversationSoFar = chatState.messages
+			.map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
+			.join('\n\n');
+
+		// The final response from your LLM
+		const { promptResponses } = await sendToLLM(
+			/* systemPrompt => optional advanced chat instructions: */ '',
+			conversationSoFar,   // entire conversation for context
+			[{ key: 'chat', prompt: userMessage }], // minimal prompt structure
+			modelConfig
+		);
+
+		// 3️⃣ Extract response text and append to chat
+		const assistantResponse = promptResponses?.[0]?.user_response || '(no response)';
+		chatState.messages.push({ role: 'assistant', content: assistantResponse, timestamp: Date.now() });
+		appendChatMessage('assistant', assistantResponse, chatMessagesContainer);
+
+	} catch (error) {
+		console.error('Chat LLM error:', error);
+		appendChatMessage('assistant', 'Error: ' + String(error), chatMessagesContainer);
+	}
+}
+
+// Helper to create & insert message DOM node
+function appendChatMessage(
+	role: 'user' | 'assistant',
+	content: string,
+	container: HTMLDivElement
+) {
+	const msgDiv = document.createElement('div');
+	msgDiv.className = `chat-message ${role}`;
+	msgDiv.textContent = content;
+	container.appendChild(msgDiv);
+
+	// Optional: Scroll to bottom
+	container.scrollTop = container.scrollHeight;
 }

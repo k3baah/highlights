@@ -8,40 +8,31 @@ import { debugLog } from './debug';
 import { getMessage } from './i18n';
 import { updateTokenCount } from './token-counter';
 
-const RATE_LIMIT_RESET_TIME = 60000; // 1 minute in milliseconds
-let lastRequestTime = 0;
-
 // Store event listeners for cleanup
 const eventListeners = new WeakMap<HTMLElement, { [key: string]: EventListener }>();
 
 export async function sendToLLM(promptContext: string, content: string, promptVariables: PromptVariable[], model: ModelConfig): Promise<{ promptResponses: any[] }> {
 	debugLog('Interpreter', 'Sending request to LLM...');
 	
-	// Find the provider for this model
 	const provider = generalSettings.providers.find(p => p.id === model.providerId);
 	if (!provider) {
 		throw new Error(`Provider not found for model ${model.name}`);
 	}
 
-	// Get API key from provider
 	if (!provider.apiKey) {
 		throw new Error(`API key is not set for provider ${provider.name}`);
 	}
 
-	const now = Date.now();
-	if (now - lastRequestTime < RATE_LIMIT_RESET_TIME) {
-		throw new Error(`Rate limit cooldown. Please wait ${Math.ceil((RATE_LIMIT_RESET_TIME - (now - lastRequestTime)) / 1000)} seconds before trying again.`);
-	}
-
 	try {
 		const systemContent = 
-			`You are a helpful assistant. Please respond with one JSON object named \`prompts_responses\` — no explanatory text before or after. Use the keys provided, e.g. \`prompt_1\`, \`prompt_2\`, and fill in the values. Values should be Markdown strings unless otherwise specified. Make your responses concise. For example, your response should look like: {"prompts_responses":{"prompt_1":"tag1, tag2, tag3","prompt_2":"- bullet1\n- bullet 2\n- bullet3"}}`;
+			`You are a helpful assistant analyzing a web page. You have access to the page content and any highlights the user has made. 
+			 Respond naturally and conversationally. If the user references highlights, acknowledge them in your response.
+			 Keep responses concise but informative. Format responses in Markdown when appropriate.`;
 		
-		const promptContent = {	
-			prompts: promptVariables.reduce((acc, { key, prompt }) => {
-				acc[key] = prompt;
-				return acc;
-			}, {} as { [key: string]: string })
+		const promptContent = {
+			conversation: content,
+			currentMessage: promptVariables[0]?.prompt || '',
+			pageContent: promptContext
 		};
 
 		let requestUrl: string;
@@ -50,49 +41,15 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 			'Content-Type': 'application/json',
 		};
 
-		if (provider.name.toLowerCase().includes('hugging')) {
-			// Replace {model-id} in baseUrl with the actual model ID
-			requestUrl = provider.baseUrl.replace('{model-id}', model.providerModelId);
-			requestBody = {
-				model: model.providerModelId,
-				messages: [
-					{ role: 'system', content: systemContent },
-					{ role: 'user', content: `${promptContext}` },
-					{ role: 'user', content: `${JSON.stringify(promptContent)}` }
-				],
-				max_tokens: 1600,
-				stream: false
-			};					
-			headers = {
-				...headers,
-				'Authorization': `Bearer ${provider.apiKey}`
-			};
-		} else if (provider.baseUrl.includes('openai.azure.com')) {
-			requestUrl = provider.baseUrl;
-			requestBody = {
-				messages: [
-					{ role: 'system', content: systemContent },
-					{ role: 'user', content: `${promptContext}` },
-					{ role: 'user', content: `${JSON.stringify(promptContent)}` }
-				],
-				temperature: 0.5,
-				max_tokens: 1600,
-				stream: false
-			};
-			headers = {
-				...headers,
-				'api-key': provider.apiKey
-			};
-		} else if (provider.name.toLowerCase().includes('anthropic')) {
+		if (provider.name.toLowerCase().includes('anthropic')) {
 			requestUrl = provider.baseUrl;
 			requestBody = {
 				model: model.providerModelId,
 				max_tokens: 1600,
 				messages: [
-					{ role: 'user', content: `${promptContext}` },
-					{ role: 'user', content: `${JSON.stringify(promptContent)}` }
+					{ role: 'user', content: `${promptContext}\n\n${content}` }
 				],
-				temperature: 0.5,
+				temperature: 0.7,
 				system: systemContent
 			};
 			headers = {
@@ -107,22 +64,17 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 				model: model.providerModelId,
 				messages: [
 					{ role: 'system', content: systemContent },
-					{ role: 'user', content: `${promptContext}` },
-					{ role: 'user', content: `${JSON.stringify(promptContent)}` }
+					{ role: 'user', content: `${promptContext}\n\n${content}` }
 				],
-				format: 'json',
-				temperature: 0.5,
 				stream: false
 			};
 		} else {
-			// Default OpenAI-compatible request format
 			requestUrl = provider.baseUrl;
 			requestBody = {
 				model: model.providerModelId,
 				messages: [
 					{ role: 'system', content: systemContent },
-					{ role: 'user', content: `${promptContext}` },
-					{ role: 'user', content: `${JSON.stringify(promptContent)}` }
+					{ role: 'user', content: `${promptContext}\n\n${content}` }
 				],
 				temperature: 0.7
 			};
@@ -151,53 +103,25 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 		const responseText = await response.text();
 		debugLog('Interpreter', `Raw ${provider.name} response:`, responseText);
 
-		let data;
-		try {
-			data = JSON.parse(responseText);
-		} catch (error) {
-			console.error('Error parsing JSON response:', error);
-			throw new Error(`Failed to parse response from ${provider.name}`);
-		}
-
-		debugLog('Interpreter', `Parsed ${provider.name} response:`, data);
-
-		lastRequestTime = now;
-
+		const data = JSON.parse(responseText);
 		let llmResponseContent: string;
-		if (provider.name.toLowerCase().includes('anthropic')) {
-			// Handle Anthropic's nested content structure
-			const textContent = data.content[0]?.text;
-			if (textContent) {
-				try {
-					// Try to parse the inner content first
-					const parsed = JSON.parse(textContent);
-					llmResponseContent = JSON.stringify(parsed);
-				} catch {
-					// If parsing fails, use the raw text
-					llmResponseContent = textContent;
-				}
-			} else {
-				llmResponseContent = JSON.stringify(data);
-			}
-		} else if (provider.name.toLowerCase().includes('ollama')) {
-			const messageContent = data.message?.content;
-			if (messageContent) {
-				try {
-					const parsed = JSON.parse(messageContent);
-					llmResponseContent = JSON.stringify(parsed);
-				} catch {
-					llmResponseContent = messageContent;
-				}
-			} else {
-				llmResponseContent = JSON.stringify(data);
-			}
-		} else {
-			// OpenAI and others
-			llmResponseContent = data.choices[0]?.message?.content || JSON.stringify(data);
-		}
-		debugLog('Interpreter', 'Processed LLM response:', llmResponseContent);
 
-		return parseLLMResponse(llmResponseContent, promptVariables);
+		if (provider.name.toLowerCase().includes('anthropic')) {
+			llmResponseContent = data.content[0]?.text || '';
+		} else if (provider.name.toLowerCase().includes('ollama')) {
+			llmResponseContent = data.message?.content || '';
+		} else {
+			llmResponseContent = data.choices[0]?.message?.content || '';
+		}
+
+		return {
+			promptResponses: [{
+				key: 'chat',
+				prompt: promptVariables[0]?.prompt || '',
+				user_response: llmResponseContent
+			}]
+		};
+
 	} catch (error) {
 		console.error(`Error sending to ${provider.name} LLM:`, error);
 		throw error;
