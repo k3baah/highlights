@@ -397,6 +397,14 @@
 		align-self: flex-start;
 		color: var(--text-normal);
 	}
+	
+	&.error {
+		align-self: center;
+		color: var(--text-error);
+		font-size: var(--font-ui-smaller);
+		background-color: var(--background-modifier-error);
+		padding: 4px 8px;
+	}
 }
 
 #chat-input-box {
@@ -451,4 +459,20 @@
 			transition: transform 0.1s ease-in-out;
 		}
 	}
+}
+
+#chat-send-btn {
+	&:disabled {
+		opacity: 0.7;
+		cursor: not-allowed;
+		
+		i.spin {
+			animation: spin 1s linear infinite;
+		}
+	}
+}
+
+@keyframes spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
 }

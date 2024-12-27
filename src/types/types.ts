@@ -84,3 +84,16 @@ export interface HistoryEntry {
 	vault?: string;
 	path?: string;
 }
+
+export interface ChatMessage {
+	role: 'user' | 'assistant';
+	content: string;
+	timestamp: number;
+	highlightRefs?: string[]; // IDs of highlights referenced in this message
+}
+
+export interface ChatState {
+	messages: ChatMessage[];
+	isProcessing: boolean;
+	error?: string;
+}

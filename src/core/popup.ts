@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { Template, Property, PromptVariable } from '../types/types';
+import { Template, Property, PromptVariable, ChatMessage, ChatState } from '../types/types';
 import { incrementStat, addHistoryEntry, getClipHistory } from '../utils/storage-utils';
 import { generateFrontmatter, saveToObsidian } from '../utils/obsidian-note-creator';
 import { extractPageContent, initializePageContent } from '../utils/content-extractor';
@@ -32,6 +32,10 @@ let currentVariables: { [key: string]: string } = {};
 let currentTabId: number | undefined;
 let lastSelectedVault: string | null = null;
 let isHighlighterMode = false;
+let chatState: ChatState = {
+	messages: [],
+	isProcessing: false
+};
 
 const isSidePanel = window.location.pathname.includes('side-panel.html');
 
@@ -1142,3 +1146,99 @@ async function handleSaveToDownloads() {
 
 // Update the resize event listener to use the debounced version
 window.addEventListener('resize', debouncedSetPopupDimensions);
+
+function addChatMessage(message: ChatMessage): void {
+	chatState.messages.push(message);
+	updateChatUI();
+}
+
+function clearChatHistory(): void {
+	chatState.messages = [];
+	updateChatUI();
+}
+
+function setChatProcessing(isProcessing: boolean): void {
+	chatState.isProcessing = isProcessing;
+	updateChatProcessingUI();
+}
+
+function setChatError(error?: string): void {
+	chatState.error = error;
+	updateChatErrorUI();
+}
+
+function updateChatUI(): void {
+	const chatMessages = document.getElementById('chat-messages');
+	if (!chatMessages) return;
+
+	chatMessages.innerHTML = '';
+	chatState.messages.forEach(message => {
+		const messageDiv = document.createElement('div');
+		messageDiv.className = `chat-message ${message.role}`;
+		messageDiv.textContent = message.content;
+		chatMessages.appendChild(messageDiv);
+	});
+
+	// Scroll to bottom
+	chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function updateChatProcessingUI(): void {
+	const sendButton = document.getElementById('chat-send-btn') as HTMLButtonElement;
+	const chatInput = document.getElementById('chat-message-input') as HTMLTextAreaElement;
+	
+	if (sendButton && chatInput) {
+		sendButton.disabled = chatState.isProcessing;
+		chatInput.disabled = chatState.isProcessing;
+		
+		// Update button icon to show processing state
+		const icon = sendButton.querySelector('i');
+		if (icon) {
+			icon.setAttribute('data-lucide', chatState.isProcessing ? 'loader-2' : 'arrow-up');
+			if (chatState.isProcessing) {
+				icon.classList.add('spin');
+			} else {
+				icon.classList.remove('spin');
+			}
+		}
+	}
+}
+
+function updateChatErrorUI(): void {
+	if (!chatState.error) return;
+	
+	const chatMessages = document.getElementById('chat-messages');
+	if (!chatMessages) return;
+
+	const errorDiv = document.createElement('div');
+	errorDiv.className = 'chat-message error';
+	errorDiv.textContent = chatState.error;
+	chatMessages.appendChild(errorDiv);
+	chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+async function saveChatState(): Promise<void> {
+	const currentUrl = window.location.href;
+	const data = {
+		url: currentUrl,
+		messages: chatState.messages
+	};
+	
+	await browser.storage.local.set({ [`chat_${currentUrl}`]: data });
+}
+
+interface StoredChatData {
+	url: string;
+	messages: ChatMessage[];
+}
+
+async function loadChatState(): Promise<void> {
+	const currentUrl = window.location.href;
+	const result = await browser.storage.local.get(`chat_${currentUrl}`);
+	const data = result[`chat_${currentUrl}`] as StoredChatData | undefined;
+	
+	if (data?.messages) {
+		chatState.messages = data.messages;
+		updateChatUI();
+	}
+}
