@@ -1196,12 +1196,14 @@ function updateChatUI(): void {
 	if (!chatMessages) return;
 
 	chatMessages.innerHTML = '';
-	chatState.messages.forEach(message => {
-		const messageDiv = document.createElement('div');
-		messageDiv.className = `chat-message ${message.role}`;
-		messageDiv.textContent = message.content;
-		chatMessages.appendChild(messageDiv);
-	});
+	chatState.messages
+		.filter(message => !message.isContext) // Only show non-context messages
+		.forEach(message => {
+			const messageDiv = document.createElement('div');
+			messageDiv.className = `chat-message ${message.role}`;
+			messageDiv.textContent = message.content;
+			chatMessages.appendChild(messageDiv);
+		});
 
 	// Scroll to bottom
 	chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1256,15 +1258,47 @@ interface StoredChatData {
 	messages: ChatMessage[];
 }
 
+async function initializeChatContext(): Promise<void> {
+	// Clear any existing messages
+	chatState.messages = [];
+	
+	// Get the current page content
+	if (currentTabId) {
+		const extractedData = await memoizedExtractPageContent(currentTabId);
+		if (extractedData) {
+			// Add hidden context messages
+			chatState.messages = [
+				{
+					role: 'user',
+					content: `PAGE CONTENT: ${extractedData.content}`,
+					timestamp: Date.now(),
+					isContext: true // Add this flag to types
+				},
+				{
+					role: 'assistant',
+					content: 'Sure. Happy to help.',
+					timestamp: Date.now(),
+					isContext: true
+				}
+			];
+		}
+	}
+}
+
 async function loadChatState(): Promise<void> {
 	const currentUrl = window.location.href;
 	const result = await browser.storage.local.get(`chat_${currentUrl}`);
 	const data = result[`chat_${currentUrl}`] as StoredChatData | undefined;
 	
+	// Initialize context first
+	await initializeChatContext();
+	
+	// Then add any stored messages that aren't context messages
 	if (data?.messages) {
-		chatState.messages = data.messages;
-		updateChatUI();
+		chatState.messages.push(...data.messages.filter(m => !m.isContext));
 	}
+	
+	updateChatUI();
 }
 
 async function handleSendChatMessage(
@@ -1274,14 +1308,16 @@ async function handleSendChatMessage(
 	const userMessage = chatInput.value.trim();
 	if (!userMessage) return;
 
-	// 1️⃣ Show user message in chat UI
-	chatState.messages.push({ role: 'user', content: userMessage, timestamp: Date.now() });
+	// Add visible user message
+	chatState.messages.push({ 
+		role: 'user', 
+		content: userMessage, 
+		timestamp: Date.now()
+	});
 	appendChatMessage('user', userMessage, chatMessagesContainer);
 	chatInput.value = '';
 
 	try {
-		// 2️⃣ Pass entire conversation (chatHistory) to existing LLM code
-		//    Example reusing "sendToLLM" from interpreter
 		const modelConfig = loadedSettings.models.find(
 			(m) => m.id === loadedSettings.interpreterModel
 		);
@@ -1289,23 +1325,28 @@ async function handleSendChatMessage(
 			throw new Error('No valid model configuration found for chat.');
 		}
 
-		// For demonstration, the entire chat is concatenated; refine as desired
+		// Include all messages in conversation history
 		const conversationSoFar = chatState.messages
 			.map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
 			.join('\n\n');
 
-		// The final response from your LLM
 		const { promptResponses } = await sendToLLM(
-			/* systemPrompt => optional advanced chat instructions: */ '',
-			conversationSoFar,   // entire conversation for context
-			[{ key: 'chat', prompt: userMessage }], // minimal prompt structure
+			'', // Empty context since it's in the messages
+			conversationSoFar,
+			[{ key: 'chat', prompt: userMessage }],
 			modelConfig
 		);
 
-		// 3️⃣ Extract response text and append to chat
 		const assistantResponse = promptResponses?.[0]?.user_response || '(no response)';
-		chatState.messages.push({ role: 'assistant', content: assistantResponse, timestamp: Date.now() });
+		chatState.messages.push({ 
+			role: 'assistant', 
+			content: assistantResponse, 
+			timestamp: Date.now()
+		});
 		appendChatMessage('assistant', assistantResponse, chatMessagesContainer);
+
+		// Save chat state after each message
+		await saveChatState();
 
 	} catch (error) {
 		console.error('Chat LLM error:', error);

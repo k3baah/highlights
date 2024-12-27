@@ -89,7 +89,8 @@ export interface ChatMessage {
 	role: 'user' | 'assistant';
 	content: string;
 	timestamp: number;
-	highlightRefs?: string[]; // IDs of highlights referenced in this message
+	highlightRefs?: string[];
+	isContext?: boolean;
 }
 
 export interface ChatState {
