@@ -1,0 +1,43 @@
+.chat-history-panel {
+  display: none;
+  height: 100%;
+  background: var(--background-primary);
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.chat-history-header {
+  margin-bottom: 1rem;
+  
+  h2 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0;
+  }
+}
+
+.chat-card {
+  padding: 1rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: var(--background-modifier-hover);
+  }
+
+  .chat-card-title {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-card-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+} 

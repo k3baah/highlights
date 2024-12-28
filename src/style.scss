@@ -39,6 +39,8 @@ body {
 @import 'styles/tree-items';
 @import 'styles/toggles';
 
+@import './styles/chat-history.scss';
+
 a.text-muted,
 .text-muted {
 	color: var(--text-muted);

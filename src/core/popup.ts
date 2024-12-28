@@ -39,6 +39,7 @@ import {
 } from '../utils/chat';
 import { updateChatContextWithHighlights } from '../utils/chat';
 import { highlights } from '../utils/highlighter';
+import { showChatHistory } from '../managers/chat-history';
 
 let loadedSettings: Settings;
 let currentTemplate: Template | null = null;
@@ -497,6 +498,14 @@ function setupEventListeners(tabId: number) {
 					await initializeChatContext(extractedData.content);
 				}
 			}
+		});
+	}
+
+	const showChatsButton = document.getElementById('show-chats');
+	if (showChatsButton) {
+		showChatsButton.addEventListener('click', (e) => {
+			e.preventDefault();
+			showChatHistory();
 		});
 	}
 }

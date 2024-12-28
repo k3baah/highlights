@@ -389,16 +389,20 @@
 	font-size: var(--font-ui-small);
 	line-height: 1.4;
 	white-space: pre-wrap;
+	width: fit-content;
 	
 	&.user {
 		align-self: flex-end;
 		background-color: var(--interactive-accent);
 		color: white;
+		margin-left: auto;
 	}
 	
 	&.assistant {
 		align-self: flex-start;
+		background-color: var(--background-modifier-form-field);
 		color: var(--text-normal);
+		margin-right: auto;
 	}
 	
 	&.error {
@@ -407,6 +411,7 @@
 		font-size: var(--font-ui-smaller);
 		background-color: var(--background-modifier-error);
 		padding: 4px 8px;
+		width: auto;
 	}
 }
 
