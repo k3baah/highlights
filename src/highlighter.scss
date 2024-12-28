@@ -71,6 +71,13 @@ body.obsidian-highlighter-active {
 		padding: 0 4px 0 8px;
 	}
 
+	#obsidian-highlight-count {
+		flex: 1;
+		text-align: center;
+		padding: 0 8px !important;
+		font-variant-numeric: tabular-nums;
+	}
+
 	button#obsidian-redo-highlights:not(.active),
 	button#obsidian-undo-highlights:not(.active) {
 		background-color: transparent !important;
@@ -80,16 +87,6 @@ body.obsidian-highlighter-active {
 	button#obsidian-undo-highlights,
 	button#obsidian-redo-highlights {
 		display: var(--obsidian-undo-button-display) !important;
-	}
-
-	.highlight-count {
-		font-variant-numeric: tabular-nums;
-		color: #bebebe !important;
-		padding-inline-start: 4px;
-	}
-
-	button#obsidian-clear-highlights {
-		padding: 0 8px 0 8px !important;
 	}
 
 	button {

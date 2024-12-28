@@ -148,17 +148,3 @@ ${highlights.map(h => `"${h.content}"`).join('\n')}
   
   await saveChatState();
 }
-
-export function updateHighlightCounterUI(highlightCount: number): void {
-  const counter = document.getElementById('chat-highlight-counter');
-  const countSpan = counter?.querySelector('.highlight-count');
-  
-  if (counter && countSpan) {
-    if (highlightCount > 0) {
-      counter.style.display = 'flex';
-      countSpan.textContent = `${highlightCount} highlights`;
-    } else {
-      counter.style.display = 'none';
-    }
-  }
-}

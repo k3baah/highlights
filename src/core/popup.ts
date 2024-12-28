@@ -33,7 +33,7 @@ import {
 	loadChatState,
 	initializeChatContext
 } from '../utils/chat';
-import { updateChatContextWithHighlights, updateHighlightCounterUI } from '../utils/chat';
+import { updateChatContextWithHighlights } from '../utils/chat';
 import { highlights } from '../utils/highlighter';
 
 let loadedSettings: Settings;
@@ -1268,9 +1268,6 @@ async function initializeChatInterface() {
 	}
 
 	await loadChatState();
-
-	// Initialize highlight counter
-	updateHighlightCounterUI(highlights.length);
 }
 
 async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
@@ -1327,7 +1324,4 @@ async function handleHighlightsUpdate() {
 	
 	// Update chat context with current highlights
 	await updateChatContextWithHighlights(highlights);
-	
-	// Update the highlight counter
-	updateHighlightCounterUI(highlights.length);
 }
