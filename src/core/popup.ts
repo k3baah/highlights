@@ -498,6 +498,17 @@ function setupEventListeners(tabId: number) {
 					await initializeChatContext(extractedData.content);
 				}
 			}
+
+			// Make sure chat interface is visible (not chat history)
+			const chatHistoryPanel = document.querySelector('.chat-history-panel') as HTMLElement;
+			const chatMessages = document.getElementById('chat-messages') as HTMLElement;
+			const chatInputBox = document.getElementById('chat-input-box') as HTMLElement;
+			
+			if (chatHistoryPanel) {
+				chatHistoryPanel.style.display = 'none';
+			}
+			if (chatMessages) chatMessages.style.display = 'block';
+			if (chatInputBox) chatInputBox.style.display = 'flex';
 		});
 	}
 

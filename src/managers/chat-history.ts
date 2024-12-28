@@ -47,7 +47,6 @@ export async function showChatHistory(): Promise<void> {
   // Render chat history
   chatHistoryPanel.innerHTML = `
     <div class="chat-history-header">
-      <h3>All chats</h3>
     </div>
     <div class="chat-history-list">
       ${data?.sessions.map(session => createChatCard(session)).join('') || 'No chats yet'}
