@@ -25,6 +25,14 @@ import { sanitizeFileName } from '../utils/string-utils';
 import { saveFile } from '../utils/file-utils';
 import { translatePage, getMessage, setupLanguageAndDirection } from '../utils/i18n';
 import { sendToLLM } from '../utils/interpreter';
+import { 
+	chatState, 
+	sendChatMessage, 
+	updateChatState,
+	saveChatState,
+	loadChatState,
+	initializeChatContext
+} from '../utils/chat';
 
 let loadedSettings: Settings;
 let currentTemplate: Template | null = null;
@@ -33,10 +41,7 @@ let currentVariables: { [key: string]: string } = {};
 let currentTabId: number | undefined;
 let lastSelectedVault: string | null = null;
 let isHighlighterMode = false;
-let chatState: ChatState = {
-	messages: [],
-	isProcessing: false
-};
+
 
 const isSidePanel = window.location.pathname.includes('side-panel.html');
 
@@ -507,19 +512,15 @@ async function initializeUI() {
 
 	// If elements exist, set up event listeners
 	if (chatSendBtn && chatMessageInput && chatMessagesContainer) {
-		chatSendBtn.addEventListener('click', () => {
-			handleSendChatMessage(chatMessageInput, chatMessagesContainer);
-		});
+		chatSendBtn.addEventListener('click', () => handleChatSubmit(chatMessageInput));
 
-		// Add enter key handling (optional)
 		chatMessageInput.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter' && !e.shiftKey) {
 				e.preventDefault();
-				handleSendChatMessage(chatMessageInput, chatMessagesContainer);
+					handleChatSubmit(chatMessageInput);
 			}
 		});
 
-		// Load previous chat state
 		await loadChatState();
 	}
 }
@@ -1243,128 +1244,73 @@ function updateChatErrorUI(): void {
 	chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-async function saveChatState(): Promise<void> {
-	const currentUrl = window.location.href;
-	const data = {
-		url: currentUrl,
-		messages: chatState.messages
-	};
+async function initializeChatInterface() {
+	const chatSendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement;
+	const chatInput = document.getElementById('chat-message-input') as HTMLTextAreaElement;
 	
-	await browser.storage.local.set({ [`chat_${currentUrl}`]: data });
-}
+	if (!chatSendBtn || !chatInput) return;
 
-interface StoredChatData {
-	url: string;
-	messages: ChatMessage[];
-}
+	chatSendBtn.addEventListener('click', () => handleChatSubmit(chatInput));
+	chatInput.addEventListener('keydown', (e) => {
+		if (e.key === 'Enter' && !e.shiftKey) {
+			e.preventDefault();
+			handleChatSubmit(chatInput);
+		}
+	});
 
-async function initializeChatContext(): Promise<void> {
-	// Clear any existing messages
-	chatState.messages = [];
-	
-	// Get the current page content
 	if (currentTabId) {
 		const extractedData = await memoizedExtractPageContent(currentTabId);
 		if (extractedData) {
-			// Add hidden context messages
-			chatState.messages = [
-				{
-					role: 'user',
-					content: `PAGE CONTENT: ${extractedData.content}`,
-					timestamp: Date.now(),
-					isContext: true // Add this flag to types
-				},
-				{
-					role: 'assistant',
-					content: 'Sure. Happy to help.',
-					timestamp: Date.now(),
-					isContext: true
-				}
-			];
+			await initializeChatContext(extractedData.content);
 		}
 	}
+
+	await loadChatState();
 }
 
-async function loadChatState(): Promise<void> {
-	const currentUrl = window.location.href;
-	const result = await browser.storage.local.get(`chat_${currentUrl}`);
-	const data = result[`chat_${currentUrl}`] as StoredChatData | undefined;
-	
-	// Initialize context first
-	await initializeChatContext();
-	
-	// Then add any stored messages that aren't context messages
-	if (data?.messages) {
-		chatState.messages.push(...data.messages.filter(m => !m.isContext));
-	}
-	
-	updateChatUI();
-}
-
-async function handleSendChatMessage(
-	chatInput: HTMLTextAreaElement,
-	chatMessagesContainer: HTMLDivElement
-) {
-	const userMessage = chatInput.value.trim();
-	if (!userMessage) return;
-
-	// Add visible user message
-	chatState.messages.push({ 
-		role: 'user', 
-		content: userMessage, 
-		timestamp: Date.now()
-	});
-	appendChatMessage('user', userMessage, chatMessagesContainer);
-	chatInput.value = '';
+async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
+	const message = chatInput.value.trim();
+	if (!message || !currentTabId) return;
 
 	try {
+		const extractedData = await memoizedExtractPageContent(currentTabId);
+		if (!extractedData) throw new Error('Could not extract page content');
+
 		const modelConfig = loadedSettings.models.find(
-			(m) => m.id === loadedSettings.interpreterModel
+			m => m.id === loadedSettings.interpreterModel
 		);
-		if (!modelConfig) {
-			throw new Error('No valid model configuration found for chat.');
-		}
+		if (!modelConfig) throw new Error('No valid model configuration found');
 
-		// Include all messages in conversation history
-		const conversationSoFar = chatState.messages
-			.map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
-			.join('\n\n');
+		updateChatState({
+			messages: [...chatState.messages, {
+				role: 'user',
+				content: message,
+				timestamp: Date.now()
+			}]
+		});
 
-		const { promptResponses } = await sendToLLM(
-			'', // Empty context since it's in the messages
-			conversationSoFar,
-			[{ key: 'chat', prompt: userMessage }],
+		chatInput.value = '';
+
+		const response = await sendChatMessage(
+			message,
+			extractedData.content,
 			modelConfig
 		);
 
-		const assistantResponse = promptResponses?.[0]?.user_response || '(no response)';
-		chatState.messages.push({ 
-			role: 'assistant', 
-			content: assistantResponse, 
-			timestamp: Date.now()
+		updateChatState({
+			messages: [...chatState.messages, {
+				role: 'assistant',
+				content: response,
+				timestamp: Date.now()
+			}]
 		});
-		appendChatMessage('assistant', assistantResponse, chatMessagesContainer);
 
-		// Save chat state after each message
 		await saveChatState();
 
 	} catch (error) {
-		console.error('Chat LLM error:', error);
-		appendChatMessage('assistant', 'Error: ' + String(error), chatMessagesContainer);
+		console.error('Chat error:', error);
+		updateChatState({
+			error: String(error)
+		});
 	}
-}
-
-// Helper to create & insert message DOM node
-function appendChatMessage(
-	role: 'user' | 'assistant',
-	content: string,
-	container: HTMLDivElement
-) {
-	const msgDiv = document.createElement('div');
-	msgDiv.className = `chat-message ${role}`;
-	msgDiv.textContent = content;
-	container.appendChild(msgDiv);
-
-	// Optional: Scroll to bottom
-	container.scrollTop = container.scrollHeight;
 }
