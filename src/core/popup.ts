@@ -33,6 +33,8 @@ import {
 	loadChatState,
 	initializeChatContext
 } from '../utils/chat';
+import { updateChatContextWithHighlights, updateHighlightCounterUI } from '../utils/chat';
+import { highlights } from '../utils/highlighter';
 
 let loadedSettings: Settings;
 let currentTemplate: Template | null = null;
@@ -241,9 +243,9 @@ function setupMessageListeners() {
 				showError(getMessage('onlyHttpSupported'));
 			}
 		} else if (request.action === "highlightsUpdated") {
-			// Refresh fields when highlights are updated
 			if (currentTabId !== undefined) {
 				refreshFields(currentTabId);
+				handleHighlightsUpdate();
 			}
 		} else if (request.action === "updatePopupHighlighterUI") {
 			isHighlighterMode = request.isActive;
@@ -1266,6 +1268,9 @@ async function initializeChatInterface() {
 	}
 
 	await loadChatState();
+
+	// Initialize highlight counter
+	updateHighlightCounterUI(highlights.length);
 }
 
 async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
@@ -1281,11 +1286,13 @@ async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
 		);
 		if (!modelConfig) throw new Error('No valid model configuration found');
 
+		// Add current highlights to the message
 		updateChatState({
 			messages: [...chatState.messages, {
 				role: 'user',
 				content: message,
-				timestamp: Date.now()
+				timestamp: Date.now(),
+				highlightIds: highlights.map(h => h.id)
 			}]
 		});
 
@@ -1313,4 +1320,14 @@ async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
 			error: String(error)
 		});
 	}
+}
+
+async function handleHighlightsUpdate() {
+	if (!currentTabId) return;
+	
+	// Update chat context with current highlights
+	await updateChatContextWithHighlights(highlights);
+	
+	// Update the highlight counter
+	updateHighlightCounterUI(highlights.length);
 }

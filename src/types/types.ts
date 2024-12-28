@@ -91,10 +91,12 @@ export interface ChatMessage {
 	timestamp: number;
 	highlightRefs?: string[];
 	isContext?: boolean;
+	highlightIds?: string[];
 }
 
 export interface ChatState {
 	messages: ChatMessage[];
 	isProcessing: boolean;
 	error?: string;
+	contextMessage?: ChatMessage;
 }

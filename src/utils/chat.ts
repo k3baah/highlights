@@ -1,6 +1,7 @@
 import browser from './browser-polyfill';
 import { ChatMessage, ChatState, ModelConfig } from '../types/types';
 import { sendToLLM } from './interpreter';
+import { AnyHighlightData } from './highlighter';
 
 interface StoredChatData {
   url: string;
@@ -125,4 +126,39 @@ export async function initializeChatContext(pageContent: string): Promise<void> 
       isContext: true
     }
   ];
+}
+
+export async function updateChatContextWithHighlights(highlights: AnyHighlightData[]): Promise<void> {
+  if (!chatState.messages.length) return;
+
+  const contextMessageIndex = chatState.messages.findIndex(msg => msg.isContext);
+  if (contextMessageIndex === -1) return;
+
+  const highlightsSection = highlights.length ? `
+HIGHLIGHTED EXCERPTS:
+${highlights.map(h => `"${h.content}"`).join('\n')}
+` : '';
+
+  const baseContent = chatState.messages[contextMessageIndex].content;
+  const updatedContent = baseContent.includes('HIGHLIGHTED EXCERPTS:') 
+    ? baseContent.split('HIGHLIGHTED EXCERPTS:')[0] + highlightsSection
+    : baseContent + '\n\n' + highlightsSection;
+
+  chatState.messages[contextMessageIndex].content = updatedContent.trim();
+  
+  await saveChatState();
+}
+
+export function updateHighlightCounterUI(highlightCount: number): void {
+  const counter = document.getElementById('chat-highlight-counter');
+  const countSpan = counter?.querySelector('.highlight-count');
+  
+  if (counter && countSpan) {
+    if (highlightCount > 0) {
+      counter.style.display = 'flex';
+      countSpan.textContent = `${highlightCount} highlights`;
+    } else {
+      counter.style.display = 'none';
+    }
+  }
 }
