@@ -27,11 +27,15 @@ import { translatePage, getMessage, setupLanguageAndDirection } from '../utils/i
 import { sendToLLM } from '../utils/interpreter';
 import { 
 	chatState, 
-	sendChatMessage, 
+	sendChatMessage,
+	createNewChat as createNewChatUtil,
+	initializeChatContext, 
 	updateChatState,
 	saveChatState,
 	loadChatState,
-	initializeChatContext
+	generateSessionId,
+	StoredChatData,
+	ChatSession
 } from '../utils/chat';
 import { updateChatContextWithHighlights } from '../utils/chat';
 import { highlights } from '../utils/highlighter';
@@ -469,6 +473,28 @@ function setupEventListeners(tabId: number) {
 							parentElement.style.display = 'none';
 						}
 					});
+				}
+			}
+		});
+	}
+
+	const newChatButton = document.getElementById('new-chat');
+	if (newChatButton) {
+		newChatButton.addEventListener('click', async (e) => {
+			e.preventDefault();
+			await createNewChatUtil();
+			
+			// Clear the chat input
+			const chatInput = document.getElementById('chat-message-input') as HTMLTextAreaElement;
+			if (chatInput) {
+				chatInput.value = '';
+			}
+			
+			// Re-initialize chat context with page content
+			if (currentTabId) {
+				const extractedData = await memoizedExtractPageContent(currentTabId);
+				if (extractedData) {
+					await initializeChatContext(extractedData.content);
 				}
 			}
 		});
@@ -1283,7 +1309,6 @@ async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
 		);
 		if (!modelConfig) throw new Error('No valid model configuration found');
 
-		// Add current highlights to the message
 		updateChatState({
 			messages: [...chatState.messages, {
 				role: 'user',
@@ -1324,4 +1349,38 @@ async function handleHighlightsUpdate() {
 	
 	// Update chat context with current highlights
 	await updateChatContextWithHighlights(highlights);
+}
+
+async function createNewChat() {
+	const currentUrl = window.location.href;
+	
+	// Save current chat before creating new one
+	await saveChatState();
+	
+	// Create new chat session
+	const newSessionId = generateSessionId();
+	
+	// Update chat state
+	updateChatState({
+		messages: [],
+		isProcessing: false,
+		sessionId: newSessionId
+	});
+	
+	// Save new session to storage
+	const result = await browser.storage.local.get(`chat_${currentUrl}`);
+	const data = result[`chat_${currentUrl}`] as StoredChatData | undefined;
+	
+	const newData: StoredChatData = {
+		url: currentUrl,
+		sessions: [...(data?.sessions || []), {
+			id: newSessionId,
+			url: currentUrl,
+			messages: [],
+			createdAt: Date.now()
+		}],
+		activeSessionId: newSessionId
+	};
+	
+	await browser.storage.local.set({ [`chat_${currentUrl}`]: newData });
 }

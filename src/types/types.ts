@@ -89,7 +89,6 @@ export interface ChatMessage {
 	role: 'user' | 'assistant';
 	content: string;
 	timestamp: number;
-	highlightRefs?: string[];
 	isContext?: boolean;
 	highlightIds?: string[];
 }
@@ -98,5 +97,5 @@ export interface ChatState {
 	messages: ChatMessage[];
 	isProcessing: boolean;
 	error?: string;
-	contextMessage?: ChatMessage;
+	sessionId: string;
 }

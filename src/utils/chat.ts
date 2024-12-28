@@ -3,15 +3,28 @@ import { ChatMessage, ChatState, ModelConfig } from '../types/types';
 import { sendToLLM } from './interpreter';
 import { AnyHighlightData } from './highlighter';
 
-interface StoredChatData {
+export interface ChatSession {
+  id: string;
   url: string;
   messages: ChatMessage[];
+  createdAt: number;
+}
+
+export interface StoredChatData {
+  url: string;
+  sessions: ChatSession[];
+  activeSessionId: string;
 }
 
 export let chatState: ChatState = {
   messages: [],
-  isProcessing: false
+  isProcessing: false,
+  sessionId: generateSessionId()
 };
+
+export function generateSessionId(): string {
+  return Date.now().toString() + Math.random().toString(36).slice(2, 11);
+}
 
 export async function sendChatMessage(
   message: string, 
@@ -48,12 +61,24 @@ export function updateChatState(updates: Partial<ChatState>): void {
 
 export async function saveChatState(): Promise<void> {
   const currentUrl = window.location.href;
-  await browser.storage.local.set({
-    [`chat_${currentUrl}`]: {
-      url: currentUrl,
-      messages: chatState.messages
-    }
-  });
+  const result = await browser.storage.local.get(`chat_${currentUrl}`);
+  const data = result[`chat_${currentUrl}`] as StoredChatData | undefined;
+  
+  const updatedData: StoredChatData = {
+    url: currentUrl,
+    sessions: [
+      ...(data?.sessions?.filter(s => s.id !== chatState.sessionId) || []),
+      {
+        id: chatState.sessionId,
+        url: currentUrl,
+        messages: chatState.messages,
+        createdAt: Date.now()
+      }
+    ],
+    activeSessionId: chatState.sessionId
+  };
+  
+  await browser.storage.local.set({ [`chat_${currentUrl}`]: updatedData });
 }
 
 export async function loadChatState(): Promise<void> {
@@ -61,8 +86,14 @@ export async function loadChatState(): Promise<void> {
   const result = await browser.storage.local.get(`chat_${currentUrl}`);
   const data = result[`chat_${currentUrl}`] as StoredChatData | undefined;
   
-  if (data?.messages) {
-    updateChatState({ messages: data.messages });
+  if (data?.activeSessionId) {
+    const activeSession = data.sessions.find(s => s.id === data.activeSessionId);
+    if (activeSession) {
+      updateChatState({
+        messages: activeSession.messages,
+        sessionId: activeSession.id
+      });
+    }
   }
 }
 
@@ -147,4 +178,38 @@ ${highlights.map(h => `"${h.content}"`).join('\n')}
   chatState.messages[contextMessageIndex].content = updatedContent.trim();
   
   await saveChatState();
+}
+
+export async function createNewChat(): Promise<void> {
+  const currentUrl = window.location.href;
+  
+  // Save current chat before creating new one
+  await saveChatState();
+  
+  // Create new chat session
+  const newSessionId = generateSessionId();
+  
+  // Update chat state
+  updateChatState({
+    messages: [],
+    isProcessing: false,
+    sessionId: newSessionId
+  });
+  
+  // Save new session to storage
+  const result = await browser.storage.local.get(`chat_${currentUrl}`);
+  const data = result[`chat_${currentUrl}`] as StoredChatData | undefined;
+  
+  const newData: StoredChatData = {
+    url: currentUrl,
+    sessions: [...(data?.sessions || []), {
+      id: newSessionId,
+      url: currentUrl,
+      messages: [],
+      createdAt: Date.now()
+    }],
+    activeSessionId: newSessionId
+  };
+  
+  await browser.storage.local.set({ [`chat_${currentUrl}`]: newData });
 }
