@@ -66,7 +66,7 @@ export async function sendToLLM(promptContext: string, content: string, promptVa
 					{ role: 'system', content: systemContent },
 					{ role: 'user', content: `${promptContext}\n\n${content}` }
 				],
-				stream: false
+				stream: true
 			};
 		} else {
 			requestUrl = provider.baseUrl;

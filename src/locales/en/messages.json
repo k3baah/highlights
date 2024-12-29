@@ -187,10 +187,10 @@
 		"message": "Highlight content on web pages that you can save to Obsidian."
 	},
 	"enableInterpreter": {
-		"message": "Enable interpreter"
+		"message": "Enable chat"
 	},
 	"enableInterpreterDescription": {
-		"message": "Use natural language to extract data from pages. For example, you can use the template syntax $strong_start${{\"a summary of the page\"}}$strong_end$. Requires an API key or custom model configured below.  $link_start$Learn more$link_end$.",
+		"message": "Enable chat history and chat interface.",
 		"placeholders": {
 			"link_end": {
 				"content": "</a>"
@@ -367,7 +367,7 @@
 		"message": "interpret"
 	},
 	"interpreter": {
-		"message": "Interpreter"
+		"message": "Chat"
 	},
 	"interpreterContext": {
 		"message": "Interpreter context"
