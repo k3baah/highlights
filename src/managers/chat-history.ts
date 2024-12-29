@@ -2,6 +2,7 @@ import { ChatMessage, ChatState } from '../types/types';
 import { updateChatState } from '../utils/chat';
 import browser from '../utils/browser-polyfill';
 import { initializeIcons } from '../icons/icons';
+import dayjs from 'dayjs';
 
 // Add these interfaces locally since they're not in types.ts
 interface ChatSession {
@@ -131,6 +132,10 @@ async function loadChat(sessionId: string, data: StoredChatData | undefined): Pr
 function createChatCard(session: ChatSession): string {
   const firstMessage = session.messages.find((msg: ChatMessage) => !msg.isContext);
   const title = firstMessage?.content || 'New Chat';
+  const timestamp = firstMessage?.timestamp 
+    ? dayjs(firstMessage.timestamp).format('MMM D, YYYY h:mm A')
+    : 'No messages yet';
+
   return `
     <div class="chat-card" data-session-id="${session.id}">
       <div class="chat-card-content">
@@ -138,7 +143,7 @@ function createChatCard(session: ChatSession): string {
           ${title}
         </div>
         <div class="chat-card-subtitle">
-          placeholder subtitle
+          ${timestamp}
         </div>
       </div>
       <button class="chat-card-delete" data-session-id="${session.id}" aria-label="Delete chat">
