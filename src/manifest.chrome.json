@@ -20,7 +20,7 @@
 		"https://*/*"
 	],
 	"action": {
-		"default_popup": "popup.html"
+		"default_title": "Open Web Clipper"
 	},
 	"side_panel": {
 		"default_path": "side-panel.html"

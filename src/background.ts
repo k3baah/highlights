@@ -11,6 +11,11 @@ let hasHighlights = false;
 let isContextMenuCreating = false;
 let popupPorts: { [tabId: number]: browser.Runtime.Port } = {};
 
+// Set up side panel behavior when extension starts
+chrome.sidePanel
+	.setPanelBehavior({ openPanelOnActionClick: true })
+	.catch((error) => console.error('Error setting side panel behavior:', error));
+
 // Check if a popup is open for a given tab
 function isPopupOpen(tabId: number): boolean {
 	return popupPorts.hasOwnProperty(tabId);
@@ -38,8 +43,16 @@ async function sendMessageToPopup(tabId: number, message: any): Promise<void> {
 	}
 }
 
-browser.action.onClicked.addListener((tab) => {
-	if (tab.id) {
+browser.action.onClicked.addListener(async (tab) => {
+	if (!tab.id) return;
+
+	// Ensure content script is loaded
+	await ensureContentScriptLoaded(tab.id);
+
+	// For Chrome, the side panel will open automatically due to openPanelOnActionClick
+	// For other browsers, fall back to the popup behavior
+	const browserType = await detectBrowser();
+	if (!['chrome', 'edge'].includes(browserType)) {
 		browser.scripting.executeScript({
 			target: { tabId: tab.id },
 			files: ['content.js']
