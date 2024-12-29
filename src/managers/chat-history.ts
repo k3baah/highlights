@@ -1,6 +1,7 @@
 import { ChatMessage, ChatState } from '../types/types';
 import { updateChatState } from '../utils/chat';
 import browser from '../utils/browser-polyfill';
+import { initializeIcons } from '../icons/icons';
 
 // Add these interfaces locally since they're not in types.ts
 interface ChatSession {
@@ -63,16 +64,36 @@ export async function showChatHistory(): Promise<void> {
   chatHistoryPanel.style.display = 'block';
   isVisible = true;
 
-  // Add click handlers to chat cards
+  // Add click handlers to chat cards and delete buttons
   const chatCards = chatHistoryPanel.querySelectorAll('.chat-card');
   chatCards.forEach(card => {
-    card.addEventListener('click', () => {
+    // Handle card click
+    card.addEventListener('click', (e) => {
+      // Don't trigger if clicking delete button
+      if ((e.target as HTMLElement).closest('.chat-card-delete')) return;
+      
       const sessionId = card.getAttribute('data-session-id');
       if (sessionId) {
         loadChat(sessionId, data);
       }
     });
+
+    // Handle delete button click
+    const deleteBtn = card.querySelector('.chat-card-delete');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent card click
+        const sessionId = deleteBtn.getAttribute('data-session-id');
+        if (sessionId && data) {
+          await deleteChat(sessionId, data);
+        }
+      });
+    }
   });
+
+  // Initialize Lucide icons for the delete buttons
+  const icons = Array.from(chatHistoryPanel.querySelectorAll('[data-lucide]'));
+  icons.forEach(icon => initializeIcons(icon as HTMLElement));
 }
 
 async function loadChat(sessionId: string, data: StoredChatData | undefined): Promise<void> {
@@ -109,14 +130,44 @@ async function loadChat(sessionId: string, data: StoredChatData | undefined): Pr
 
 function createChatCard(session: ChatSession): string {
   const firstMessage = session.messages.find((msg: ChatMessage) => !msg.isContext);
+  const title = firstMessage?.content || 'New Chat';
   return `
     <div class="chat-card" data-session-id="${session.id}">
-      <div class="chat-card-title">
-        ${firstMessage?.content || 'New Chat'}
+      <div class="chat-card-content">
+        <div class="chat-card-title" title="${title}">
+          ${title}
+        </div>
+        <div class="chat-card-subtitle">
+          placeholder subtitle
+        </div>
       </div>
-      <div class="chat-card-subtitle">
-        placeholder subtitle
-      </div>
+      <button class="chat-card-delete" data-session-id="${session.id}" aria-label="Delete chat">
+        <i data-lucide="trash-2"></i>
+      </button>
     </div>
   `;
+}
+
+async function deleteChat(sessionId: string, data: StoredChatData): Promise<void> {
+  const currentUrl = window.location.href;
+  
+  // Remove the session from the data
+  const updatedData: StoredChatData = {
+    ...data,
+    sessions: data.sessions.filter(s => s.id !== sessionId)
+  };
+
+  // If we're deleting the active session, set a new active session
+  if (data.activeSessionId === sessionId) {
+    const remainingSessions = updatedData.sessions;
+    updatedData.activeSessionId = remainingSessions.length > 0 
+      ? remainingSessions[remainingSessions.length - 1].id 
+      : '';
+  }
+
+  // Save the updated data
+  await browser.storage.local.set({ [`chat_${currentUrl}`]: updatedData });
+
+  // Refresh the chat history display
+  await showChatHistory();
 } 
