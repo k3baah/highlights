@@ -1316,18 +1316,53 @@ async function initializeChatInterface() {
 	await loadChatState();
 }
 
+async function debugModelConfig() {
+	const settings = await loadSettings();
+	console.log('Debug before chat submit:', {
+		interpreterModel: settings?.interpreterModel,
+		availableModels: settings?.models,
+		enabled: settings?.interpreterEnabled,
+		foundModel: settings?.models?.find(m => m.id === settings?.interpreterModel)
+	});
+}
+
 async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
+	await debugModelConfig();
 	const message = chatInput.value.trim();
 	if (!message || !currentTabId) return;
 
 	try {
+		// First ensure settings are loaded
+		if (!loadedSettings) {
+			loadedSettings = await loadSettings();
+		}
+
 		const extractedData = await memoizedExtractPageContent(currentTabId);
 		if (!extractedData) throw new Error('Could not extract page content');
 
+		// Add debug logging
+		console.log('Loaded settings:', loadedSettings);
+		console.log('Interpreter model:', loadedSettings?.interpreterModel);
+		console.log('Available models:', loadedSettings?.models);
+		
+		// Check if we have models configured
+		if (!loadedSettings.models?.length) {
+			throw new Error('No models configured. Please configure a model in settings.');
+		}
+
+		// Find the active model
 		const modelConfig = loadedSettings.models.find(
-			m => m.id === loadedSettings.interpreterModel
+			m => m.id === loadedSettings.interpreterModel && m.enabled
 		);
-		if (!modelConfig) throw new Error('No valid model configuration found');
+		
+		// More specific error messages
+		if (!loadedSettings.interpreterModel) {
+			throw new Error('No interpreter model selected. Please select a model in settings.');
+		}
+		
+		if (!modelConfig) {
+			throw new Error(`Selected model "${loadedSettings.interpreterModel}" not found or not enabled.`);
+		}
 
 		updateChatState({
 			messages: [...chatState.messages, {

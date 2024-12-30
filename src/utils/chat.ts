@@ -1,7 +1,12 @@
 import browser from './browser-polyfill';
 import { ChatMessage, ChatState, ModelConfig } from '../types/types';
-import { sendToLLM } from './interpreter';
 import { AnyHighlightData } from './highlighter';
+import { generalSettings } from './storage-utils';
+
+interface LLMResponse {
+  content: string;
+  error?: string;
+}
 
 export interface ChatSession {
   id: string;
@@ -26,6 +31,104 @@ export function generateSessionId(): string {
   return Date.now().toString() + Math.random().toString(36).slice(2, 11);
 }
 
+async function sendToLLM(
+  promptContext: string,
+  content: string,
+  model: ModelConfig
+): Promise<LLMResponse> {
+  const provider = generalSettings.providers.find(p => p.id === model.providerId);
+  if (!provider) {
+    throw new Error(`Provider not found for model ${model.name}`);
+  }
+
+  if (!provider.apiKey) {
+    throw new Error(`API key is not set for provider ${provider.name}`);
+  }
+
+  try {
+    const systemContent = 
+      `You are a helpful assistant analyzing a web page. You have access to the page content and any highlights the user has made. 
+       Respond naturally and conversationally. If the user references highlights, acknowledge them in your response.
+       Keep responses concise but informative. Format responses in Markdown when appropriate.`;
+    
+    const requestUrl = provider.baseUrl;
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+
+    let requestBody: Record<string, any>;
+
+    if (provider.name.toLowerCase().includes('anthropic')) {
+      requestBody = {
+        model: model.providerModelId,
+        max_tokens: 1600,
+        messages: [
+          { role: 'user', content: `${promptContext}\n\n${content}` }
+        ],
+        temperature: 0.7,
+        system: systemContent
+      };
+      Object.assign(headers, {
+        'x-api-key': provider.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      });
+    } else if (provider.name.toLowerCase().includes('ollama')) {
+      requestBody = {
+        model: model.providerModelId,
+        messages: [
+          { role: 'system', content: systemContent },
+          { role: 'user', content: `${promptContext}\n\n${content}` }
+        ],
+        stream: true
+      };
+    } else {
+      requestBody = {
+        model: model.providerModelId,
+        messages: [
+          { role: 'system', content: systemContent },
+          { role: 'user', content: `${promptContext}\n\n${content}` }
+        ],
+        temperature: 0.7
+      };
+      Object.assign(headers, {
+        "HTTP-Referer": 'https://obsidian.md/',
+        "X-Title": 'Obsidian Web Clipper',
+        'Authorization': `Bearer ${provider.apiKey}`
+      });
+    }
+
+    const response = await fetch(requestUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${provider.name} error: ${response.statusText} ${errorText}`);
+    }
+
+    const responseText = await response.text();
+    const data = JSON.parse(responseText);
+
+    let llmResponseContent: string;
+
+    if (provider.name.toLowerCase().includes('anthropic')) {
+      llmResponseContent = data.content[0]?.text || '';
+    } else if (provider.name.toLowerCase().includes('ollama')) {
+      llmResponseContent = data.message?.content || '';
+    } else {
+      llmResponseContent = data.choices[0]?.message?.content || '';
+    }
+
+    return { content: llmResponseContent };
+  } catch (error) {
+    console.error(`Error sending to ${provider.name} LLM:`, error);
+    throw error;
+  }
+}
+
 export async function sendChatMessage(
   message: string, 
   pageContext: string,
@@ -35,14 +138,8 @@ export async function sendChatMessage(
     chatState.isProcessing = true;
     updateChatProcessingUI();
 
-    const response = await sendToLLM(
-      pageContext,
-      message,
-      [{ key: 'chat', prompt: message }],
-      modelConfig
-    );
-
-    return response.promptResponses[0]?.user_response || '';
+    const response = await sendToLLM(pageContext, message, modelConfig);
+    return response.content;
   } catch (error) {
     console.error('Chat error:', error);
     throw error;
