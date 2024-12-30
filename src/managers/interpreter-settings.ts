@@ -642,11 +642,12 @@ function saveInterpreterSettingsFromForm(): void {
 	const interpreterToggle = document.getElementById('interpreter-toggle') as HTMLInputElement;
 	const interpreterAutoRunToggle = document.getElementById('interpreter-auto-run-toggle') as HTMLInputElement;
 	const defaultPromptContextInput = document.getElementById('default-prompt-context') as HTMLTextAreaElement;
+	
 
 	const updatedSettings = {
 		interpreterEnabled: interpreterToggle.checked,
 		interpreterAutoRun: interpreterAutoRunToggle.checked,
-		defaultPromptContext: defaultPromptContextInput.value
+		defaultPromptContext: defaultPromptContextInput.value,
 	};
 
 	saveSettings(updatedSettings);

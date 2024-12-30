@@ -522,14 +522,14 @@ function setupEventListeners(tabId: number) {
 }
 
 async function initializeUI() {
-	const clipButton = document.getElementById('clip-btn');
-	if (clipButton) {
-		clipButton.addEventListener('click', handleClip);
+	// const clipButton = document.getElementById('clip-btn');
+	// if (clipButton) {
+	// 	clipButton.addEventListener('click', handleClip);
 		
-		clipButton.focus();
-	} else {
-		console.warn('Clip button not found');
-	}
+	// 	clipButton.focus();
+	// } else {
+	// 	console.warn('Clip button not found');
+	// }
 
 	const showMoreActionsButton = document.getElementById('show-variables') as HTMLElement;
 	const variablesPanel = document.createElement('div');
@@ -939,42 +939,22 @@ async function initializeTemplateFields(currentTabId: number, template: Template
 		}
 	}
 
-	if (template) {
-		if (generalSettings.interpreterEnabled) {
-			await initializeInterpreter(template, variables, currentTabId!, currentTabId ? await browser.tabs.get(currentTabId).then(tab => tab.url || '') : '');
+	// if (template) {
+	// 	if (generalSettings.interpreterEnabled) {
+	// 		await initializeInterpreter(template, variables, currentTabId!, currentTabId ? await browser.tabs.get(currentTabId).then(tab => tab.url || '') : '');
 
-			// Check if there are any prompt variables
-			const promptVariables = collectPromptVariables(template);
+	// 		// Check if there are any prompt variables
+	// 		const promptVariables = collectPromptVariables(template);
 
-			// If auto-run is enabled and there are prompt variables, use interpreter
-			if (generalSettings.interpreterAutoRun && promptVariables.length > 0) {
-				try {
-					const interpretBtn = document.getElementById('interpret-btn') as HTMLButtonElement;
-					const modelSelect = document.getElementById('model-select') as HTMLSelectElement;
-					const selectedModelId = modelSelect?.value || generalSettings.interpreterModel;
-					const modelConfig = generalSettings.models.find(m => m.id === selectedModelId);
-					if (!modelConfig) {
-						throw new Error(`Model configuration not found for ${selectedModelId}`);
-					}
-					await handleInterpreterUI(template, variables, currentTabId!, currentTabId ? await browser.tabs.get(currentTabId).then(tab => tab.url || '') : '', modelConfig);
-					
-					// Ensure the button shows the completed state after auto-run
-					if (interpretBtn) {
-						interpretBtn.classList.add('done');
-						interpretBtn.disabled = true;
-					}
-				} catch (error) {
-					console.error('Error auto-processing with interpreter:', error);
-					const interpretBtn = document.getElementById('interpret-btn') as HTMLButtonElement;
-					if (interpretBtn) {
-						interpretBtn.classList.add('error');
-					}
-				}
-			}
-		}
+	// 		// Auto-run logic...
+	// 	}
+	// 	// Rest of template handling...
+	// }
 
-		const replacedTemplate = await getReplacedTemplate(template, variables, currentTabId!, currentTabId ? await browser.tabs.get(currentTabId).then(tab => tab.url || '') : '');
-		debugLog('Variables', 'Current template with replaced variables:', JSON.stringify(replacedTemplate, null, 2));
+	// Add separate model-select initialization
+	const modelSelect = document.getElementById('model-select');
+	if (modelSelect) {
+		modelSelect.style.display = 'inline-block';
 	}
 }
 
@@ -1327,18 +1307,18 @@ async function debugModelConfig() {
 }
 
 async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
+	console.log('1. Starting chat submit');
 	await debugModelConfig();
 	const message = chatInput.value.trim();
 	if (!message || !currentTabId) return;
 
 	try {
 		// First ensure settings are loaded
-		if (!loadedSettings) {
-			loadedSettings = await loadSettings();
-		}
+		console.log('2. Loading settings');
+		loadedSettings = await loadSettings();
 
 		const extractedData = await memoizedExtractPageContent(currentTabId);
-		if (!extractedData) throw new Error('Could not extract page content');
+		if (!extractedData) throw new Error('Could not extrsact page content');
 
 		// Add debug logging
 		console.log('Loaded settings:', loadedSettings);
@@ -1378,7 +1358,7 @@ async function handleChatSubmit(chatInput: HTMLTextAreaElement) {
 		const response = await sendChatMessage(
 			message,
 			extractedData.content,
-			modelConfig
+			// modelConfig
 		);
 
 		updateChatState({

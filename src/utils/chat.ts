@@ -1,7 +1,7 @@
 import browser from './browser-polyfill';
 import { ChatMessage, ChatState, ModelConfig } from '../types/types';
 import { AnyHighlightData } from './highlighter';
-import { generalSettings } from './storage-utils';
+import { generalSettings, saveSettings, loadSettings } from './storage-utils';
 
 interface LLMResponse {
   content: string;
@@ -131,12 +131,20 @@ async function sendToLLM(
 
 export async function sendChatMessage(
   message: string, 
-  pageContext: string,
-  modelConfig: ModelConfig
+  pageContext: string
 ): Promise<string> {
   try {
     chatState.isProcessing = true;
     updateChatProcessingUI();
+
+    // Get current model configuration
+    const modelSelect = document.getElementById('model-select') as HTMLSelectElement;
+    const selectedModelId = modelSelect?.value || generalSettings.interpreterModel;
+    const modelConfig = generalSettings.models.find(m => m.id === selectedModelId);
+    
+    if (!modelConfig) {
+      throw new Error(`Model configuration not found for ${selectedModelId}`);
+    }
 
     const response = await sendToLLM(pageContext, message, modelConfig);
     return response.content;
@@ -309,4 +317,56 @@ export async function createNewChat(): Promise<void> {
   };
   
   await browser.storage.local.set({ [`chat_${currentUrl}`]: newData });
+}
+
+export async function initializeChatModelSelect(): Promise<void> {
+  const modelSelect = document.getElementById('model-select') as HTMLSelectElement;
+  
+  // Load settings first
+  const settings = await loadSettings();
+  console.log('Loaded settings:', settings);
+  
+  if (modelSelect) {
+    modelSelect.addEventListener('change', () => {
+      void (async () => {
+        generalSettings.interpreterModel = modelSelect.value;
+        await saveSettings();
+      })();
+    });
+
+    // Filter enabled models and populate select options
+    const enabledModels = settings.models.filter(model => model.enabled);
+    console.log('Enabled models:', enabledModels);
+    
+    if (enabledModels.length === 0) {
+      console.warn('No enabled models found');
+      return;
+    }
+
+    // Populate select options
+    modelSelect.innerHTML = enabledModels
+      .map(model => `<option value="${model.id}">${model.name}</option>`)
+      .join('');
+
+    // Check if last selected model exists and is enabled
+    const lastSelectedModel = enabledModels.find(model => 
+      model.id === settings.interpreterModel
+    );
+    
+    if (!lastSelectedModel && enabledModels.length > 0) {
+      // If last selected model is not available/enabled, use first enabled model
+      generalSettings.interpreterModel = enabledModels[0].id;
+      await saveSettings();
+    }
+
+    // Set the selected value and make visible
+    modelSelect.value = settings.interpreterModel || (enabledModels[0]?.id ?? '');
+    modelSelect.style.display = 'inline-block';
+  }
+}
+
+export async function initializeChat(): Promise<void> {
+  await loadChatState();
+  initializeChatModelSelect();
+  updateChatUI();
 }
